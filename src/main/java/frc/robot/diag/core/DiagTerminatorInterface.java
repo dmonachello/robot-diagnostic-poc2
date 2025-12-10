@@ -6,7 +6,7 @@ package frc.robot.diag.core;
  * Devices like limit switches, beam breaks, timers, etc. can implement this.
  * The same object can also be a full diagnostic device (extends DiagDeviceBase).
  */
-public interface DiagTerminator {
+public interface DiagTerminatorInterface {
 
     /**
      * Returns a status code when this terminator wants the owning test to stop.
@@ -22,4 +22,7 @@ public interface DiagTerminator {
      * Name to show in logs / status when this terminator fires.
      */
     String getTerminatorName();
+
+    //public int addTerminator(DiagDeviceBase dev);
+
 }

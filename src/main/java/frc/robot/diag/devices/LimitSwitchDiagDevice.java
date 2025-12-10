@@ -4,12 +4,12 @@ import edu.wpi.first.wpilibj.DigitalInput;
 
 import frc.robot.diag.core.DiagDeviceBase;
 import frc.robot.diag.core.DiagStatus32;
-import frc.robot.diag.core.DiagTerminator;
+import frc.robot.diag.core.DiagTerminatorInterface;
 
 /**
  * Limit switch diagnostic device that can also act as a terminator.
  */
-public class LimitSwitchDiagDevice extends DiagDeviceBase implements DiagTerminator {
+public class LimitSwitchDiagDevice extends DiagDeviceBase implements DiagTerminatorInterface {
 
     private final int dioChannel;
     private DigitalInput input;
@@ -61,6 +61,8 @@ public class LimitSwitchDiagDevice extends DiagDeviceBase implements DiagTermina
         // Nothing to stop for a DIO input
     }
 
+
+    
     // ----------------------------------------------------------------
     // DiagTerminator implementation
     // ----------------------------------------------------------------
@@ -82,4 +84,5 @@ public class LimitSwitchDiagDevice extends DiagDeviceBase implements DiagTermina
     public String getTerminatorName() {
         return getDiagName();
     }
+
 }

@@ -6,24 +6,6 @@ import java.util.List;
 
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
-/**
- * Base class for all diagnostic devices.
- *
- * Responsibilities:
- *  - Register each device in a global list.
- *  - Manage per-device Enable and Retry controls from SmartDashboard.
- *  - Run tests only when enabled.
- *  - Stop tests when disabled or when a terminator fires.
- *  - Do a full close/re-open on Retry.
- *  - Publish health, summary, and status (decimal + hex) to the dashboard.
- *
- * Subclasses implement the hardware-specific pieces:
- *  - openHardware()
- *  - closeHardware()
- *  - runHardwareTest()
- *  - stopHardware()
- *  - (optional) onTestStart(), onTestEnd()
- */
 public abstract class DiagDeviceBase {
 
     // Global device list
@@ -52,9 +34,10 @@ public abstract class DiagDeviceBase {
     protected final String diagName;
     protected final String baseKey;   // "Diag/<name>/"
 
+    // Per-device status holder: just lastStatus + hex formatter
     protected final DiagDeviceStatus status = new DiagDeviceStatus();
 
-    private final List<DiagTerminator> terminators = new ArrayList<>();
+    private final List<DiagTerminatorInterface> terminators = new ArrayList<>();
 
     // Status tracking
     private int lastInitStatus = 0;
@@ -82,46 +65,16 @@ public abstract class DiagDeviceBase {
         return diagName;
     }
 
-    public void addTerminator(DiagTerminator term) {
-        if (term != null) {
-            terminators.add(term);
-        }
-    }
-
     // ----------------------------------------------------------------
-    // Hooks for subclasses
+    // Subclass API
     // ----------------------------------------------------------------
 
-    /**
-     * Allocate/open hardware for this device.
-     * Return a status code (S_INIT_OK, S_INIT_FAIL, or device-specific).
-     */
     protected abstract int openHardware();
-
-    /**
-     * Close/deallocate hardware. Must be safe to call even if open failed.
-     */
     protected abstract void closeHardware();
-
-    /**
-     * Single test step. Called repeatedly while the test is running.
-     * Return a status describing the current step result.
-     */
     protected abstract int runHardwareTest();
-
-    /**
-     * Stop the hardware safely (set outputs to zero, etc.).
-     */
     protected abstract void stopHardware();
 
-    /**
-     * Optional hook when a test starts.
-     */
     protected void onTestStart() {}
-
-    /**
-     * Optional hook when a test ends.
-     */
     protected void onTestEnd() {}
 
     // ----------------------------------------------------------------
@@ -129,7 +82,7 @@ public abstract class DiagDeviceBase {
     // ----------------------------------------------------------------
 
     public void periodic() {
-        initDashboardIfNeeded();
+        updateDashboard();
 
         boolean enable = SmartDashboard.getBoolean(baseKey + "Enable", false);
         boolean retry  = SmartDashboard.getBoolean(baseKey + "Retry", false);
@@ -150,7 +103,7 @@ public abstract class DiagDeviceBase {
             everRan         = false;
             testCompleted   = false;
 
-            publish();
+            updateDashboard();
             return;
         }
 
@@ -161,14 +114,14 @@ public abstract class DiagDeviceBase {
                 onTestEnd();
                 running = false;
             }
-            // Don't clear testCompleted here; disabling preserves last result.
-            publish();
+            // disabling preserves last result
+            updateDashboard();
             return;
         }
 
         // Enabled but test was already completed by terminator or fatal init
         if (testCompleted) {
-            publish();
+            updateDashboard();
             return;
         }
 
@@ -188,7 +141,7 @@ public abstract class DiagDeviceBase {
                 running = false;
                 testCompleted = true;
 
-                publish();
+                updateDashboard();
                 return;
             }
         }
@@ -204,7 +157,7 @@ public abstract class DiagDeviceBase {
             running = false;
             testCompleted = true;
 
-            publish();
+            updateDashboard();
             return;
         }
 
@@ -213,7 +166,7 @@ public abstract class DiagDeviceBase {
         lastTestStatus = stepStatus;
         everRan = true;
 
-        publish();
+        updateDashboard();
     }
 
     public void stopTesting() {
@@ -229,7 +182,7 @@ public abstract class DiagDeviceBase {
     // ----------------------------------------------------------------
 
     private int checkTerminators() {
-        for (DiagTerminator t : terminators) {
+        for (DiagTerminatorInterface t : terminators) {
             int s = t.getTerminatorStatus();
             if (s != 0) {
                 return s;
@@ -238,40 +191,38 @@ public abstract class DiagDeviceBase {
         return 0;
     }
 
+    public void addTerminator(DiagTerminatorInterface term) {
+        if (term != null) {
+            terminators.add(term);
+        }
+    }
+
+
     // ----------------------------------------------------------------
     // Dashboard helpers
     // ----------------------------------------------------------------
 
-    private void initDashboardIfNeeded() {
-        if (dashboardInitialized) {
-            return;
+    private void updateDashboard() {
+        // One-time setup
+        if (!dashboardInitialized) {
+            dashboardInitialized = true;
+    
+            // Set up the controls once. We never touch these again here.
+            SmartDashboard.putBoolean(baseKey + "Enable", false);
+            SmartDashboard.putBoolean(baseKey + "Retry",  false);
+    
+            // You could also seed initial text here if you want,
+            // but it will get overwritten by the logic below anyway.
         }
-        dashboardInitialized = true;
-
-        SmartDashboard.putBoolean(baseKey + "Enable", false);
-        SmartDashboard.putBoolean(baseKey + "Retry", false);
-
-        SmartDashboard.putString(baseKey + "Health", "UNKNOWN");
-        SmartDashboard.putString(baseKey + "StatusSummary", "test not run");
-
-        // Both decimal and hex, initialized to 0
-        SmartDashboard.putString(baseKey + "LastStatusHex", "0x00000000");
-    }
-
-    private void publish() {
-        publishLastStatus(lastTestStatus);
-        SmartDashboard.putString(baseKey + "Health", computeHealth());
+    
+        // Live status every time
+        status.setLastStatus(lastTestStatus);
+    
+        SmartDashboard.putString(baseKey + "LastStatusHex", status.getLastStatusHex());
+        SmartDashboard.putString(baseKey + "Health",        computeHealth());
         SmartDashboard.putString(baseKey + "StatusSummary", computeSummary());
     }
-
-    /**
-     * Publish the raw status in decimal and a human-readable hex string.
-     */
-    private void publishLastStatus(int status) {
-        SmartDashboard.putString(
-                baseKey + "LastStatusHex",
-                String.format("0x%08X", status));
-    }
+        
 
     private String computeHealth() {
         if (!everRan) {
@@ -285,7 +236,6 @@ public abstract class DiagDeviceBase {
         } else if (sev >= DiagStatus32.SEV_ERROR) {
             return "BAD";
         } else {
-            // e.g. WARNING or any mid-level stuff
             return "POSSIBLY_BAD";
         }
     }
