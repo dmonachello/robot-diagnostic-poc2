@@ -18,21 +18,11 @@ public class LimitSwitchDiagDevice extends TerminatorDeviceBase {
         this.dioChannel = dioChannel;
     }
 
-    // -------------------- internal helper --------------------
-
-    private void ensureInput() {
-        if (input == null) {
-            input = new DigitalInput(dioChannel);
-        }
-    }
-
-    // -------------------- Diag device side --------------------
-
     @Override
     protected int openHardware() {
         try {
             closeHardware();
-            ensureInput();
+            input = new DigitalInput(dioChannel);
             return LimitSwitchDiagStatus.S_INIT_OK;
         } catch (Exception e) {
             input = null;
@@ -52,14 +42,10 @@ public class LimitSwitchDiagDevice extends TerminatorDeviceBase {
 
     @Override
     protected int runHardwareTest() {
-        try {
-            ensureInput();
-        } catch (Exception e) {
-            input = null;
-            return LimitSwitchDiagStatus.S_READ_FAULT;
+        if (input == null) {
+            return DiagStatus32.S_HW_NOT_PRESENT;
         }
 
-        // Not pressed vs pressed is NOT an error; both are healthy reads.
         try {
             input.get();
             return LimitSwitchDiagStatus.S_READ_OK;
@@ -73,24 +59,14 @@ public class LimitSwitchDiagDevice extends TerminatorDeviceBase {
         // Nothing to stop for a DIO input
     }
 
-    // -------------------- Terminator side (via TerminatorDeviceBase) --------------------
-
+    // Terminator side
     @Override
-    public String getTerminatorName() {
-        return getDiagName();
-    }
-
-    @Override
-    protected int evalTerminatorStatus() {
-        try {
-            ensureInput();
-        } catch (Exception e) {
-            // If we can't even create/read the DIO, don't spuriously kill tests.
+    public int getTerminatorStatus() {
+        if (input == null) {
             return 0;
         }
 
-        // Adjust polarity if your wiring is opposite
-        boolean pressed = !input.get();
+        boolean pressed = !input.get();  // adjust if wiring is opposite
         if (pressed) {
             return DiagStatus32.TERM_TEST_TERMINATED_OK;
         }

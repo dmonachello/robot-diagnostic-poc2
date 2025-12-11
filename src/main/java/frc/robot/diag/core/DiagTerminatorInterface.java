@@ -3,7 +3,7 @@ package frc.robot.diag.core;
 /**
  * A test terminator: something that can say "stop this test now".
  *
- * Devices like limit switches, beam breaks, timers, etc. can implement this.
+ * Devices like limit switches, beam breaks, timers, etc. implement this.
  * The same object can also be a full diagnostic device (extends DiagDeviceBase).
  */
 public interface DiagTerminatorInterface {
@@ -11,10 +11,6 @@ public interface DiagTerminatorInterface {
     /**
      * Returns a status code when this terminator wants the owning test to stop.
      * 0 means "no termination".
-     *
-     * Typical values:
-     *   TERM_TEST_TERMINATED_OK  - hit safety limit, everything fine
-     *   TERM_TEST_TERMINATED_BAD - hit error condition
      */
     int getTerminatorStatus();
 
@@ -24,14 +20,13 @@ public interface DiagTerminatorInterface {
     String getTerminatorName();
 
     /**
-     * Called by the owning DUT when its test starts.
-     * Default is no-op so simple terminators can ignore it.
+     * Called when a DUT test that uses this terminator starts.
+     * (DiagDeviceBase calls this only if the DUT's UseTerm_* flag is true.)
      */
-    default void onTestStart() {}
+    void onTestStart();
 
     /**
-     * Called by the owning DUT when its test ends (disable, retry, fault, etc.).
-     * Default is no-op so simple terminators can ignore it.
+     * Called when that DUT test ends (disabled, retry, or terminated).
      */
-    default void onTestEnd() {}
+    void onTestEnd();
 }

@@ -27,7 +27,6 @@ public class TimerTerminator extends TerminatorDeviceBase {
 
     @Override
     protected int openHardware() {
-        // Nothing to open; this is purely time-based.
         startTimeSec = -1.0;
         return DiagStatus32.S_INIT_OK;
     }
@@ -52,29 +51,21 @@ public class TimerTerminator extends TerminatorDeviceBase {
 
     @Override
     public void onTestStart() {
-        super.onTestStart();
-        startTimeSec = -1.0;  // will be set on first evalTerminatorStatus()
+        // Reset timer only for DUTs that actually use this terminator
+        startTimeSec = -1.0;
     }
 
     @Override
     public void onTestEnd() {
-        super.onTestEnd();
         // leave startTimeSec; it will be reset next test
     }
 
     @Override
-    public String getTerminatorName() {
-        return getDiagName();
-    }
-
-    @Override
-    protected int evalTerminatorStatus() {
-        if (!termActive) {
-            return 0;
-        }
-
+    public int getTerminatorStatus() {
         double now = Timer.getFPGATimestamp();
+
         if (startTimeSec < 0.0) {
+            // First call after test start: capture baseline time
             startTimeSec = now;
             return 0;
         }

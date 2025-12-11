@@ -11,9 +11,6 @@ import java.util.Map;
  *   bits  3-15: code     (13 bits)
  *   bits 16-27: facility (12 bits)
  *   bits 28-31: ctrl     (4 bits)
- *
- * All status constants should be declared using defineStatus(), which
- * both creates the 32-bit value and registers a human-readable string.
  */
 public final class DiagStatus32 {
 
@@ -25,39 +22,34 @@ public final class DiagStatus32 {
 
     // Masks for unshifted values
     public static final int SEVERITY_MASK   = 0b111;    // 3 bits (0..7)
-    public static final int CODE_MASK       = 0x1FFF;   // 13 bits (0..8191)
-    public static final int FACILITY_MASK   = 0x0FFF;   // 12 bits (0..4095)
-    public static final int CTRL_MASK       = 0xF;      // 4 bits (0..15)
+    public static final int CODE_MASK       = 0x1FFF;   // 13 bits
+    public static final int FACILITY_MASK   = 0x0FFF;   // 12 bits
+    public static final int CTRL_MASK       = 0xF;      // 4 bits
 
-    // Severities (VMS-style)
+    // Severities
     public static final int SEV__SUCCESS = 0;
     public static final int SEV__INFO    = 1;
     public static final int SEV__WARNING = 2;
     public static final int SEV__ERROR   = 3;
     public static final int SEV__FATAL   = 4;
 
-    // Convenience aliases
     public static final int SEV_SUCCESS = SEV__SUCCESS;
     public static final int SEV_INFO    = SEV__INFO;
     public static final int SEV_WARNING = SEV__WARNING;
     public static final int SEV_ERROR   = SEV__ERROR;
     public static final int SEV_FATAL   = SEV__FATAL;
 
-    // Generic facility for framework-wide codes
+    // Facilities
     public static final int FAC_GENERIC    = 0;
-    // Facility for all terminator-related statuses
-    public static final int FAC_TERMINATOR = 10;
+    public static final int FAC_TERMINATOR = 100;   // keep away from Spark/Talon/LimitSwitch
 
-    public static final int CTRL_NONE   = 0;
+    public static final int CTRL_NONE = 0;
 
     // Global mapping from full 32-bit status -> human-readable text
     private static final Map<Integer, String> STATUS_TEXT = new HashMap<>();
 
     // ---------- Core helpers ----------
 
-    /**
-     * Build a 32-bit status value from its components.
-     */
     public static int make(int ctrl, int facility, int code, int severity) {
         return  ((ctrl     & CTRL_MASK)     << CTRL_SHIFT)
               | ((facility & FACILITY_MASK) << FACILITY_SHIFT)
@@ -65,17 +57,10 @@ public final class DiagStatus32 {
               | ((severity & SEVERITY_MASK) << SEVERITY_SHIFT);
     }
 
-    /**
-     * Back-compat helper using the old parameter order:
-     *   (severity, facility, code, ctrl)
-     */
     public static int makeStatus(int severity, int facility, int code, int ctrl) {
         return make(ctrl, facility, code, severity);
     }
 
-    /**
-     * Define a status and simultaneously register its human-readable text.
-     */
     public static int defineStatus(
             int ctrl,
             int facility,
@@ -110,14 +95,6 @@ public final class DiagStatus32 {
         return getSeverity(a) > getSeverity(b);
     }
 
-    /**
-     * Return true if this status came from a terminator
-     * (time-out, limit switch, etc.).
-     */
-    public static boolean isTerminatorStatus(int status) {
-        return getFacility(status) == FAC_TERMINATOR;
-    }
-
     // ---------- Text lookup ----------
 
     public static String getMessage(int status) {
@@ -126,8 +103,8 @@ public final class DiagStatus32 {
             return msg;
         }
 
-        int sev = getSeverity(status);
-        int fac = getFacility(status);
+        int sev  = getSeverity(status);
+        int fac  = getFacility(status);
         int code = getCode(status);
 
         return "fac=" + fac + " code=" + code + " sev=" + sev
@@ -164,6 +141,7 @@ public final class DiagStatus32 {
         defineStatus(CTRL_NONE, FAC_GENERIC, CODE_HW_FAULT, SEV_ERROR,
                      "hardware fault");
 
+    // Terminator framework codes (separate facility)
     public static final int TERM_TEST_TERMINATED_OK =
         defineStatus(CTRL_NONE, FAC_TERMINATOR, CODE_TERMINATED_OK, SEV_SUCCESS,
                      "test terminated by terminator (ok)");
