@@ -4,6 +4,7 @@ import edu.wpi.first.wpilibj.TimedRobot;
 
 import frc.robot.diag.core.DiagDeviceBase;
 import frc.robot.diag.devices.LimitSwitchDiagDevice;
+import frc.robot.diag.devices.TimerTerminator;
 import frc.robot.diag.vendor.rev.SparkDiagDevice;
 
 import com.revrobotics.spark.SparkLowLevel.MotorType;
@@ -13,6 +14,7 @@ public class Robot extends TimedRobot {
     private SparkDiagDevice shooterDev;
     private SparkDiagDevice intakeDev;
     private LimitSwitchDiagDevice limitTop;
+    private TimerTerminator shootTimer;
 
     @Override
     public void robotInit() {
@@ -21,13 +23,14 @@ public class Robot extends TimedRobot {
         shooterDev = new SparkDiagDevice("ShooterMotor", 40, MotorType.kBrushless, 0.25);
         intakeDev  = new SparkDiagDevice("IntakeMotor",  41, MotorType.kBrushless, 0.20);
 
-        limitTop = new LimitSwitchDiagDevice("Limit switch Top", 9);
+        limitTop   = new LimitSwitchDiagDevice("Limit switch Top", 9);
+        shootTimer = new TimerTerminator("ShootTimer2s", 2.0);
 
-        // use limit top as terminator for shooter
-        shooterDev.addTerminator(limitTop);
-        
+        // use limit switch and optional timer as terminators for shooter
+        shooterDev.addTerminator(limitTop, true);     // safety limit, armed by default
+        shooterDev.addTerminator(shootTimer, false);  // timer, off by default
+
         System.out.println("RobotInit: diag 1 end");
-
     }
 
     @Override

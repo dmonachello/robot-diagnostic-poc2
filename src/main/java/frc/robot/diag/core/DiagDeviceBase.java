@@ -28,28 +28,47 @@ public abstract class DiagDeviceBase {
     }
 
     // ----------------------------------------------------------------
+    // Terminator binding
+    // ----------------------------------------------------------------
+
+    private static class TerminatorBinding {
+        final DiagTerminatorInterface terminator;
+        final String useKey;  // SmartDashboard key for "UseAsTerminator"
+
+        TerminatorBinding(DiagTerminatorInterface terminator, String useKey) {
+            this.terminator = terminator;
+            this.useKey = useKey;
+        }
+    }
+
+    // ----------------------------------------------------------------
     // Instance fields
     // ----------------------------------------------------------------
 
     protected final String diagName;
     protected final String baseKey;   // "Diag/<name>/"
 
-    // Per-device status holder: just lastStatus + hex formatter
     protected final DiagDeviceStatus status = new DiagDeviceStatus();
 
-    private final List<DiagTerminatorInterface> terminators = new ArrayList<>();
+    private final List<TerminatorBinding> terminators = new ArrayList<>();
 
     // Status tracking
-    private int lastInitStatus = 0;
-    private int lastTestStatus = 0;
-    private boolean everRan    = false;
+    private int  lastInitStatus = 0;
+    private int  lastTestStatus = 0;
+    private boolean everRan     = false;
+
+    // Which terminator last stopped this test (if any)
+    private String lastTerminatorName = null;
 
     // Runtime state
     private boolean running       = false;
-    private boolean testCompleted = false;   // true after terminator or fatal init
+    private boolean testCompleted = false;
 
     // Dashboard init guard
     private boolean dashboardInitialized = false;
+
+    // Track previous Enable to detect rising edge
+    private boolean lastEnable = false;
 
     // ----------------------------------------------------------------
     // Construction
@@ -69,13 +88,13 @@ public abstract class DiagDeviceBase {
     // Subclass API
     // ----------------------------------------------------------------
 
-    protected abstract int openHardware();
+    protected abstract int  openHardware();
     protected abstract void closeHardware();
-    protected abstract int runHardwareTest();
+    protected abstract int  runHardwareTest();
     protected abstract void stopHardware();
 
     protected void onTestStart() {}
-    protected void onTestEnd() {}
+    protected void onTestEnd()   {}
 
     // ----------------------------------------------------------------
     // Periodic
@@ -85,7 +104,8 @@ public abstract class DiagDeviceBase {
         updateDashboard();
 
         boolean enable = SmartDashboard.getBoolean(baseKey + "Enable", false);
-        boolean retry  = SmartDashboard.getBoolean(baseKey + "Retry", false);
+        boolean retry  = SmartDashboard.getBoolean(baseKey + "Retry",  false);
+        boolean risingEnable = enable && !lastEnable;
 
         // Retry: full reset and re-open on next enabled cycle
         if (retry) {
@@ -98,13 +118,25 @@ public abstract class DiagDeviceBase {
             }
             closeHardware();
 
-            lastInitStatus  = 0;
-            lastTestStatus  = 0;
-            everRan         = false;
-            testCompleted   = false;
+            lastInitStatus      = 0;
+            lastTestStatus      = 0;
+            everRan             = false;
+            testCompleted       = false;
+            lastTerminatorName  = null;
 
             updateDashboard();
+            lastEnable = enable;
             return;
+        }
+
+        // If Enable just transitioned from false -> true,
+        // treat that as "start a fresh test".
+        if (risingEnable) {
+            lastInitStatus      = 0;
+            lastTestStatus      = 0;
+            everRan             = false;
+            testCompleted       = false;
+            lastTerminatorName  = null;
         }
 
         // Not enabled: make sure we are not running and just publish current state
@@ -114,14 +146,15 @@ public abstract class DiagDeviceBase {
                 onTestEnd();
                 running = false;
             }
-            // disabling preserves last result
             updateDashboard();
+            lastEnable = enable;
             return;
         }
 
-        // Enabled but test was already completed by terminator or fatal init
+        // Enabled but test was already completed
         if (testCompleted) {
             updateDashboard();
+            lastEnable = enable;
             return;
         }
 
@@ -131,7 +164,6 @@ public abstract class DiagDeviceBase {
             running = true;
             onTestStart();
 
-            // If init itself was an error/fatal, treat as completed test
             if (DiagStatus32.getSeverity(lastInitStatus) >= DiagStatus32.SEV_ERROR) {
                 lastTestStatus = lastInitStatus;
                 everRan = true;
@@ -142,6 +174,7 @@ public abstract class DiagDeviceBase {
                 testCompleted = true;
 
                 updateDashboard();
+                lastEnable = enable;
                 return;
             }
         }
@@ -158,6 +191,7 @@ public abstract class DiagDeviceBase {
             testCompleted = true;
 
             updateDashboard();
+            lastEnable = enable;
             return;
         }
 
@@ -167,6 +201,7 @@ public abstract class DiagDeviceBase {
         everRan = true;
 
         updateDashboard();
+        lastEnable = enable;
     }
 
     public void stopTesting() {
@@ -182,9 +217,15 @@ public abstract class DiagDeviceBase {
     // ----------------------------------------------------------------
 
     private int checkTerminators() {
-        for (DiagTerminatorInterface t : terminators) {
-            int s = t.getTerminatorStatus();
+        for (TerminatorBinding b : terminators) {
+            boolean use = SmartDashboard.getBoolean(b.useKey, true);
+            if (!use) {
+                continue;
+            }
+
+            int s = b.terminator.getTerminatorStatus();
             if (s != 0) {
+                lastTerminatorName = b.terminator.getTerminatorName();
                 return s;
             }
         }
@@ -192,37 +233,38 @@ public abstract class DiagDeviceBase {
     }
 
     public void addTerminator(DiagTerminatorInterface term) {
-        if (term != null) {
-            terminators.add(term);
-        }
+        addTerminator(term, true);
     }
 
+    public void addTerminator(DiagTerminatorInterface term, boolean defaultUse) {
+        if (term != null) {
+            String safeName = term.getTerminatorName().replace(' ', '_');
+            String key = baseKey + "UseTerm_" + safeName;
+
+            TerminatorBinding binding = new TerminatorBinding(term, key);
+            terminators.add(binding);
+
+            SmartDashboard.setDefaultBoolean(key, defaultUse);
+        }
+    }
 
     // ----------------------------------------------------------------
     // Dashboard helpers
     // ----------------------------------------------------------------
 
     private void updateDashboard() {
-        // One-time setup
         if (!dashboardInitialized) {
             dashboardInitialized = true;
-    
-            // Set up the controls once. We never touch these again here.
             SmartDashboard.putBoolean(baseKey + "Enable", false);
             SmartDashboard.putBoolean(baseKey + "Retry",  false);
-    
-            // You could also seed initial text here if you want,
-            // but it will get overwritten by the logic below anyway.
         }
-    
-        // Live status every time
+
         status.setLastStatus(lastTestStatus);
-    
+
         SmartDashboard.putString(baseKey + "LastStatusHex", status.getLastStatusHex());
         SmartDashboard.putString(baseKey + "Health",        computeHealth());
         SmartDashboard.putString(baseKey + "StatusSummary", computeSummary());
     }
-        
 
     private String computeHealth() {
         if (!everRan) {
@@ -255,6 +297,13 @@ public abstract class DiagDeviceBase {
             prefix = "W: ";
         }
 
-        return prefix + DiagStatus32.getMessage(lastTestStatus);
+        String base = DiagStatus32.getMessage(lastTestStatus);
+
+        // If we know which terminator fired, always append it.
+        if (lastTerminatorName != null) {
+            base = base + " (terminator = " + lastTerminatorName + ")";
+        }
+
+        return prefix + base;
     }
 }

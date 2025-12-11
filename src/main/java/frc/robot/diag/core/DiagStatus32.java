@@ -44,7 +44,10 @@ public final class DiagStatus32 {
     public static final int SEV_FATAL   = SEV__FATAL;
 
     // Generic facility for framework-wide codes
-    public static final int FAC_GENERIC = 0;
+    public static final int FAC_GENERIC    = 0;
+    // Facility for all terminator-related statuses
+    public static final int FAC_TERMINATOR = 10;
+
     public static final int CTRL_NONE   = 0;
 
     // Global mapping from full 32-bit status -> human-readable text
@@ -107,6 +110,14 @@ public final class DiagStatus32 {
         return getSeverity(a) > getSeverity(b);
     }
 
+    /**
+     * Return true if this status came from a terminator
+     * (time-out, limit switch, etc.).
+     */
+    public static boolean isTerminatorStatus(int status) {
+        return getFacility(status) == FAC_TERMINATOR;
+    }
+
     // ---------- Text lookup ----------
 
     public static String getMessage(int status) {
@@ -154,11 +165,11 @@ public final class DiagStatus32 {
                      "hardware fault");
 
     public static final int TERM_TEST_TERMINATED_OK =
-        defineStatus(CTRL_NONE, FAC_GENERIC, CODE_TERMINATED_OK, SEV_SUCCESS,
+        defineStatus(CTRL_NONE, FAC_TERMINATOR, CODE_TERMINATED_OK, SEV_SUCCESS,
                      "test terminated by terminator (ok)");
 
     public static final int TERM_TEST_TERMINATED_BAD =
-        defineStatus(CTRL_NONE, FAC_GENERIC, CODE_TERMINATED_BAD, SEV_ERROR,
+        defineStatus(CTRL_NONE, FAC_TERMINATOR, CODE_TERMINATED_BAD, SEV_ERROR,
                      "test terminated by fault");
 
     private DiagStatus32() {}

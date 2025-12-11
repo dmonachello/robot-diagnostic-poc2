@@ -23,6 +23,15 @@ public interface DiagTerminatorInterface {
      */
     String getTerminatorName();
 
-    //public int addTerminator(DiagDeviceBase dev);
+    /**
+     * Called by the owning DUT when its test starts.
+     * Default is no-op so simple terminators can ignore it.
+     */
+    default void onTestStart() {}
 
+    /**
+     * Called by the owning DUT when its test ends (disable, retry, fault, etc.).
+     * Default is no-op so simple terminators can ignore it.
+     */
+    default void onTestEnd() {}
 }

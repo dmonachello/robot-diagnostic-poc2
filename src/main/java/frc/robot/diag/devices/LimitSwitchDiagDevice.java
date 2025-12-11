@@ -2,14 +2,13 @@ package frc.robot.diag.devices;
 
 import edu.wpi.first.wpilibj.DigitalInput;
 
-import frc.robot.diag.core.DiagDeviceBase;
 import frc.robot.diag.core.DiagStatus32;
-import frc.robot.diag.core.DiagTerminatorInterface;
+import frc.robot.diag.core.TerminatorDeviceBase;
 
 /**
  * Limit switch diagnostic device that can also act as a terminator.
  */
-public class LimitSwitchDiagDevice extends DiagDeviceBase implements DiagTerminatorInterface {
+public class LimitSwitchDiagDevice extends TerminatorDeviceBase {
 
     private final int dioChannel;
     private DigitalInput input;
@@ -19,11 +18,21 @@ public class LimitSwitchDiagDevice extends DiagDeviceBase implements DiagTermina
         this.dioChannel = dioChannel;
     }
 
+    // -------------------- internal helper --------------------
+
+    private void ensureInput() {
+        if (input == null) {
+            input = new DigitalInput(dioChannel);
+        }
+    }
+
+    // -------------------- Diag device side --------------------
+
     @Override
     protected int openHardware() {
         try {
             closeHardware();
-            input = new DigitalInput(dioChannel);
+            ensureInput();
             return LimitSwitchDiagStatus.S_INIT_OK;
         } catch (Exception e) {
             input = null;
@@ -43,8 +52,11 @@ public class LimitSwitchDiagDevice extends DiagDeviceBase implements DiagTermina
 
     @Override
     protected int runHardwareTest() {
-        if (input == null) {
-            return DiagStatus32.S_HW_NOT_PRESENT;
+        try {
+            ensureInput();
+        } catch (Exception e) {
+            input = null;
+            return LimitSwitchDiagStatus.S_READ_FAULT;
         }
 
         // Not pressed vs pressed is NOT an error; both are healthy reads.
@@ -61,28 +73,27 @@ public class LimitSwitchDiagDevice extends DiagDeviceBase implements DiagTermina
         // Nothing to stop for a DIO input
     }
 
-
-    
-    // ----------------------------------------------------------------
-    // DiagTerminator implementation
-    // ----------------------------------------------------------------
-
-    @Override
-    public int getTerminatorStatus() {
-        if (input == null) {
-            return 0;
-        }
-
-        boolean pressed = !input.get();  // adjust if your wiring is opposite
-        if (pressed) {
-            return DiagStatus32.TERM_TEST_TERMINATED_OK;
-        }
-        return 0;
-    }
+    // -------------------- Terminator side (via TerminatorDeviceBase) --------------------
 
     @Override
     public String getTerminatorName() {
         return getDiagName();
     }
 
+    @Override
+    protected int evalTerminatorStatus() {
+        try {
+            ensureInput();
+        } catch (Exception e) {
+            // If we can't even create/read the DIO, don't spuriously kill tests.
+            return 0;
+        }
+
+        // Adjust polarity if your wiring is opposite
+        boolean pressed = !input.get();
+        if (pressed) {
+            return DiagStatus32.TERM_TEST_TERMINATED_OK;
+        }
+        return 0;
+    }
 }
