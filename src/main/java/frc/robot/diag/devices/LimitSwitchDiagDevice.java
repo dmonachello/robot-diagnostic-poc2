@@ -13,7 +13,6 @@ public class LimitSwitchDiagDevice extends TerminatorDeviceBase {
     private final int dioChannel;
     private DigitalInput input;
 
-    // Debug sampling (updated whenever polled)
     private int lastRaw = -1;       // 0/1, -1 = unknown
     private int lastPressed = -1;   // 0/1, -1 = unknown
 
@@ -46,24 +45,20 @@ public class LimitSwitchDiagDevice extends TerminatorDeviceBase {
             } catch (Exception ignored) {}
             input = null;
         }
-        lastRaw = -1;
-        lastPressed = -1;
     }
 
     @Override
     protected int runHardwareTest() {
         if (input == null) {
-            lastRaw = -1;
-            lastPressed = -1;
             return DiagStatus32.S_HW_NOT_PRESENT;
         }
 
         try {
-            sampleInput();
+            boolean raw = input.get();
+            lastRaw = raw ? 1 : 0;
+            lastPressed = raw ? 0 : 1;  // typical pull-up wiring
             return LimitSwitchDiagStatus.S_READ_OK;
         } catch (Exception e) {
-            lastRaw = -1;
-            lastPressed = -1;
             return LimitSwitchDiagStatus.S_READ_FAULT;
         }
     }
@@ -73,35 +68,25 @@ public class LimitSwitchDiagDevice extends TerminatorDeviceBase {
         // Nothing to stop for a DIO input
     }
 
-    // ------------------------------------------------------------
-    // Terminator logic
-    // ------------------------------------------------------------
-
     @Override
     protected int evalTerminatorStatus() {
         if (input == null) {
-            lastRaw = -1;
-            lastPressed = -1;
-            return 0;
+            return DiagStatus32.TERM_CONTINUE;
         }
 
-        sampleInput();
+        boolean raw = input.get();
+        lastRaw = raw ? 1 : 0;
+        lastPressed = raw ? 0 : 1;  // typical pull-up wiring
 
         if (lastPressed == 1) {
             return DiagStatus32.TERM_TEST_TERMINATED_OK;
         }
 
-        return 0;
+        return DiagStatus32.TERM_CONTINUE;
     }
 
     @Override
     public String getTerminatorDebug() {
         return "raw=" + lastRaw + " pressed=" + lastPressed;
-    }
-
-    private void sampleInput() {
-        boolean raw = input.get();     // true = high
-        lastRaw = raw ? 1 : 0;
-        lastPressed = raw ? 0 : 1;     // typical pull-up wiring
     }
 }

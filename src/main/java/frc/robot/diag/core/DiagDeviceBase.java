@@ -45,7 +45,7 @@ public abstract class DiagDeviceBase {
         TermBinding(DiagTerminatorInterface term, String useKey) {
             this.term = term;
             this.useKey = useKey;
-            this.lastTermStatus = 0;
+            this.lastTermStatus = DiagStatus32.TERM_CONTINUE;
             this.lastTermDebug = "";
         }
     }
@@ -53,8 +53,8 @@ public abstract class DiagDeviceBase {
     private final List<TermBinding> terminators = new ArrayList<>();
 
     // Status tracking
-    private int lastInitStatus = 0;
-    private int lastTestStatus = 0;
+    private int lastInitStatus = DiagStatus32.S_UNSET;
+    private int lastTestStatus = DiagStatus32.S_UNSET;
     private boolean everRan    = false;
 
     // Runtime state
@@ -63,7 +63,7 @@ public abstract class DiagDeviceBase {
 
     // Who terminated the test (for StatusSummary)
     private String lastFiredTerminatorName = "";
-    private int lastFiredTerminatorStatus = 0;
+    private int lastFiredTerminatorStatus = DiagStatus32.S_UNSET;
 
     // Dashboard init guard
     private boolean dashboardInitialized = false;
@@ -106,7 +106,6 @@ public abstract class DiagDeviceBase {
 
     public void periodic() {
 
-        // IMPORTANT:
         // First time through, force dashboard keys to known defaults and
         // return immediately. This prevents a stale Enable=true from the
         // previous run from starting hardware the instant teleop enables.
@@ -134,16 +133,16 @@ public abstract class DiagDeviceBase {
             }
             closeHardware();
 
-            lastInitStatus  = 0;
-            lastTestStatus  = 0;
+            lastInitStatus  = DiagStatus32.S_UNSET;
+            lastTestStatus  = DiagStatus32.S_UNSET;
             everRan         = false;
             testCompleted   = false;
 
             lastFiredTerminatorName = "";
-            lastFiredTerminatorStatus = 0;
+            lastFiredTerminatorStatus = DiagStatus32.S_UNSET;
 
             for (TermBinding b : terminators) {
-                b.lastTermStatus = 0;
+                b.lastTermStatus = DiagStatus32.TERM_CONTINUE;
                 b.lastTermDebug = "";
             }
 
@@ -151,7 +150,7 @@ public abstract class DiagDeviceBase {
             return;
         }
 
-        // Not enabled: stop motor, clear completion latch so Enable can re-run
+        // Not enabled: stop device, clear completion latch so Enable can re-run
         if (!enable) {
 
             disarmAllTerminators();
@@ -165,7 +164,7 @@ public abstract class DiagDeviceBase {
 
             // Clear "who terminated" when operator disables
             lastFiredTerminatorName = "";
-            lastFiredTerminatorStatus = 0;
+            lastFiredTerminatorStatus = DiagStatus32.S_UNSET;
 
             updateDashboard(enable, retry);
             return;
@@ -182,7 +181,7 @@ public abstract class DiagDeviceBase {
 
             // Clear prior terminator attribution for the new run
             lastFiredTerminatorName = "";
-            lastFiredTerminatorStatus = 0;
+            lastFiredTerminatorStatus = DiagStatus32.S_UNSET;
 
             lastInitStatus = openHardware();
             running = true;
@@ -209,7 +208,7 @@ public abstract class DiagDeviceBase {
 
         // Check terminators first
         int termStatus = checkTerminators();
-        if (termStatus != 0) {
+        if (termStatus != DiagStatus32.TERM_CONTINUE) {
             lastTestStatus = termStatus;
             everRan = true;
 
@@ -244,7 +243,7 @@ public abstract class DiagDeviceBase {
         testCompleted = false;
 
         lastFiredTerminatorName = "";
-        lastFiredTerminatorStatus = 0;
+        lastFiredTerminatorStatus = DiagStatus32.S_UNSET;
     }
 
     // ----------------------------------------------------------------
@@ -278,7 +277,7 @@ public abstract class DiagDeviceBase {
 
             boolean use = SmartDashboard.getBoolean(b.useKey, false);
             if (!use) {
-                b.lastTermStatus = 0;
+                b.lastTermStatus = DiagStatus32.TERM_CONTINUE;
                 b.lastTermDebug = "";
                 continue;
             }
@@ -293,14 +292,14 @@ public abstract class DiagDeviceBase {
             }
             b.lastTermDebug = (dbg != null) ? dbg : "";
 
-            if (s != 0) {
+            if (s != DiagStatus32.TERM_CONTINUE) {
                 lastFiredTerminatorName = b.term.getTerminatorName();
                 lastFiredTerminatorStatus = s;
                 return s;
             }
         }
 
-        return 0;
+        return DiagStatus32.TERM_CONTINUE;
     }
 
     // B form: term + default UseTerm_* setting
@@ -332,7 +331,7 @@ public abstract class DiagDeviceBase {
             SmartDashboard.putBoolean(baseKey + "Enable", false);
             SmartDashboard.putBoolean(baseKey + "Retry",  false);
 
-            SmartDashboard.putString(baseKey + "LastStatusHex", "0x00000000");
+            SmartDashboard.putString(baseKey + "LastStatusHex", String.format("0x%08X", DiagStatus32.S_UNSET));
             SmartDashboard.putString(baseKey + "Health",        "UNKNOWN");
             SmartDashboard.putString(baseKey + "StatusSummary", "test not run");
             SmartDashboard.putString(baseKey + "State",         "IDLE");

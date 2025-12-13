@@ -6,6 +6,10 @@ package frc.robot.diag.core;
  * Key rule:
  * - When acting as a terminator, it must NOT depend on its own Enable.
  *   Only the DUT's UseTerm_* gating matters.
+ *
+ * Sentinel rule:
+ * - Terminators must not return 0.
+ * - When the terminator does NOT want to stop the DUT, it returns TERM_CONTINUE.
  */
 public interface DiagTerminatorInterface {
 
@@ -16,8 +20,9 @@ public interface DiagTerminatorInterface {
     void disarmForTest();
 
     /**
-     * Returns a status code when this terminator wants the owning test to stop.
-     * 0 means "no termination".
+     * Returns a status code:
+     * - DiagStatus32.TERM_CONTINUE means "keep going"
+     * - any other value means "terminate now using that status"
      */
     int getTerminatorStatus();
 

@@ -8,21 +8,20 @@ package frc.robot.diag.core;
  *   Only the DUT's UseTerm_* gating matters.
  *
  * Generic behavior:
- * - DUT may call armForTest()/disarmForTest()
- * - getTerminatorStatus() returns 0 unless armed
+ * - DUT calls armForTest()/disarmForTest()
+ * - getTerminatorStatus() returns TERM_CONTINUE unless armed, then delegates to evalTerminatorStatus()
  * - subclasses implement evalTerminatorStatus()
  * - subclasses may override getTerminatorDebug() to expose their raw/pressed/etc.
  *
  * Debug output:
  * - Terminator's own DebugState shows armed/hw/last + terminator-specific debug
- * - DUT DebugState shows UseTerm/armed/last per terminator (but not the raw details)
  */
 public abstract class TerminatorDeviceBase extends DiagDeviceBase implements DiagTerminatorInterface {
 
     protected boolean termActive = false;
     private boolean termHardwareOpened = false;
 
-    private int lastEvalStatus = 0;
+    private int lastEvalStatus = DiagStatus32.TERM_CONTINUE;
     private String lastEvalDebug = "";
 
     protected TerminatorDeviceBase(String diagName) {
@@ -61,8 +60,11 @@ public abstract class TerminatorDeviceBase extends DiagDeviceBase implements Dia
 
     @Override
     public final int getTerminatorStatus() {
+
         if (!termActive) {
-            return 0;
+            lastEvalStatus = DiagStatus32.TERM_CONTINUE;
+            lastEvalDebug = "";
+            return DiagStatus32.TERM_CONTINUE;
         }
 
         int s = evalTerminatorStatus();
@@ -79,7 +81,7 @@ public abstract class TerminatorDeviceBase extends DiagDeviceBase implements Dia
         return getDiagName();
     }
 
-    // Exposed for DUT-side debug summary (no raw details there)
+    // Exposed for debug
     public final boolean isArmedForTest() {
         return termActive;
     }
@@ -100,9 +102,7 @@ public abstract class TerminatorDeviceBase extends DiagDeviceBase implements Dia
         sb.append(" term_hw=").append(termHardwareOpened ? "1" : "0");
         sb.append(" term_last=").append(String.format("0x%08X", lastEvalStatus));
 
-        if (lastEvalStatus != 0) {
-            sb.append(" ").append(DiagStatus32.getMessage(lastEvalStatus));
-        }
+        sb.append(" ").append(DiagStatus32.getMessage(lastEvalStatus));
 
         if (lastEvalDebug != null && !lastEvalDebug.isEmpty()) {
             sb.append(" dbg=").append(lastEvalDebug);
@@ -114,7 +114,6 @@ public abstract class TerminatorDeviceBase extends DiagDeviceBase implements Dia
     // Subclasses implement termination logic ONLY.
     protected abstract int evalTerminatorStatus();
 
-    // Must be public if DiagTerminatorInterface declares it.
     @Override
     public String getTerminatorDebug() {
         return "";

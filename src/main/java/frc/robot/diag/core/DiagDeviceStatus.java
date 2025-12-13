@@ -1,16 +1,8 @@
 package frc.robot.diag.core;
 
-/**
- * Simple per-device status holder.
- * No SmartDashboard / NetworkTables here.
- */
 public class DiagDeviceStatus {
 
-    // Last status code for this device (DiagStatus32 int)
-    private int lastStatus = 0;
-
-    public DiagDeviceStatus() {
-    }
+    private int lastStatus = DiagStatus32.S_UNSET;
 
     public void setLastStatus(int status) {
         this.lastStatus = status;

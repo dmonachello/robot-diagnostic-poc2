@@ -43,10 +43,11 @@ public final class DiagStatus32 {
     public static final int SEV_ERROR   = SEV__ERROR;
     public static final int SEV_FATAL   = SEV__FATAL;
 
-    // Facilities
+    // Generic facility for framework-wide codes
     public static final int FAC_GENERIC    = 0;
-    public static final int FAC_TERMINATOR = 4095; // reserved for terminator outcomes
-    public static final int CTRL_NONE      = 0;
+    public static final int FAC_TERMINATOR = 10;  // reserved for terminator framework statuses
+
+    public static final int CTRL_NONE   = 0;
 
     // Global mapping from full 32-bit status -> human-readable text
     private static final Map<Integer, String> STATUS_TEXT = new HashMap<>();
@@ -126,11 +127,23 @@ public final class DiagStatus32 {
 
     // ---------- Generic framework codes ----------
 
+    public static final int CODE_UNSET          = 0;
+
     public static final int CODE_INIT_OK        = 1;
     public static final int CODE_INIT_FAIL      = 2;
     public static final int CODE_HW_NOT_PRESENT = 3;
     public static final int CODE_TEST_OK        = 4;
     public static final int CODE_HW_FAULT       = 5;
+
+    public static final int CODE_TERMINATED_OK  = 6;
+    public static final int CODE_TERMINATED_BAD = 7;
+
+    // Terminator sentinel: keep going (do not stop DUT)
+    public static final int CODE_TERM_CONTINUE  = 100;
+
+    public static final int S_UNSET =
+        defineStatus(CTRL_NONE, FAC_GENERIC, CODE_UNSET, SEV_INFO,
+                     "unset");
 
     public static final int S_INIT_OK =
         defineStatus(CTRL_NONE, FAC_GENERIC, CODE_INIT_OK, SEV_SUCCESS,
@@ -152,18 +165,21 @@ public final class DiagStatus32 {
         defineStatus(CTRL_NONE, FAC_GENERIC, CODE_HW_FAULT, SEV_ERROR,
                      "hardware fault");
 
-    // ---------- Terminator outcomes (facility = FAC_TERMINATOR) ----------
-
-    public static final int CODE_TERMINATED_OK  = 1;
-    public static final int CODE_TERMINATED_BAD = 2;
-
     public static final int TERM_TEST_TERMINATED_OK =
-        defineStatus(CTRL_NONE, FAC_TERMINATOR, CODE_TERMINATED_OK, SEV_SUCCESS,
+        defineStatus(CTRL_NONE, FAC_GENERIC, CODE_TERMINATED_OK, SEV_SUCCESS,
                      "test terminated by terminator (ok)");
 
     public static final int TERM_TEST_TERMINATED_BAD =
-        defineStatus(CTRL_NONE, FAC_TERMINATOR, CODE_TERMINATED_BAD, SEV_ERROR,
-                     "test terminated by terminator (bad)");
+        defineStatus(CTRL_NONE, FAC_GENERIC, CODE_TERMINATED_BAD, SEV_ERROR,
+                     "test terminated by fault");
+
+    /**
+     * Terminator sentinel meaning "no termination requested; keep going".
+     * This replaces returning 0 from terminators.
+     */
+    public static final int TERM_CONTINUE =
+        defineStatus(CTRL_NONE, FAC_TERMINATOR, CODE_TERM_CONTINUE, SEV_INFO,
+                     "terminator: continue");
 
     private DiagStatus32() {}
 }
