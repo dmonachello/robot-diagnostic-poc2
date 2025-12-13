@@ -5,7 +5,7 @@ import com.revrobotics.spark.SparkLowLevel.MotorType;
 import com.revrobotics.spark.SparkMax;
 
 import frc.robot.diag.core.DiagDeviceBase;
-import frc.robot.diag.core.DiagStatus32;
+//import frc.robot.diag.core.DiagStatus32;
 
 /**
  * Diagnostic device for a SparkMax + NEO combination.
@@ -48,6 +48,7 @@ public class SparkDiagDevice extends DiagDeviceBase {
         this.canId = canId;
         this.motorType = motorType;
         this.testDuty = testDuty;
+        this.motor = null;
     }
 
     // --------------------------------------------------------------------
@@ -57,10 +58,13 @@ public class SparkDiagDevice extends DiagDeviceBase {
     @Override
     protected int openHardware() {
         try {
+            // System.out.println("1 before open SparkMax " + motor + " can ID " + canId);
             // Fully reset any previous hardware and state
             closeHardwareInternal();
+            // System.out.println("2 before open SparkMax " + motor + " can ID " + canId);
 
             motor = new SparkMax(canId, motorType);
+            // System.out.println("after open SparkMax " + motor + " can ID " + canId);
             encoder = motor.getEncoder();  // NEO hall-sensor encoder
 
             resetTestState();
@@ -80,6 +84,7 @@ public class SparkDiagDevice extends DiagDeviceBase {
     }
 
     private void closeHardwareInternal() {
+
         if (motor != null) {
             try {
                 motor.set(0.0);
@@ -90,6 +95,7 @@ public class SparkDiagDevice extends DiagDeviceBase {
             } catch (Exception ignored) {
             }
         }
+        System.out.println("close hardware internal");
         motor = null;
         encoder = null;
         resetTestState();
@@ -108,7 +114,8 @@ public class SparkDiagDevice extends DiagDeviceBase {
         // If we never opened successfully, we can't test this device
         if (motor == null || encoder == null) {
             testFailed = true;
-            return SparkDiagStatus.S_CMD_ERROR;  // treat as hardware error
+            // System.out.println("sp1");
+            return SparkDiagStatus.S_CMD_ERROR;  // treat as hardware error            
         }
 
         // If we already decided this device failed, keep reporting error
@@ -118,6 +125,7 @@ public class SparkDiagDevice extends DiagDeviceBase {
                 motor.set(0.0);
             } catch (Exception ignored) {
             }
+            // System.out.println("sp2");
             return SparkDiagStatus.S_CMD_ERROR;
         }
 
@@ -133,10 +141,12 @@ public class SparkDiagDevice extends DiagDeviceBase {
                 motor.set(testDuty);
             } catch (Exception e) {
                 testFailed = true;
+                // System.out.println("sp3");
                 return SparkDiagStatus.S_CMD_ERROR;
             }
 
             // Don't mark as "good" yet – just "command sent"
+            // System.out.println("sp good1");
             return SparkDiagStatus.S_CMD_OK;
         }
 
@@ -145,6 +155,7 @@ public class SparkDiagDevice extends DiagDeviceBase {
             motor.set(testDuty);
         } catch (Exception e) {
             testFailed = true;
+            // System.out.println("sp4");
             return SparkDiagStatus.S_CMD_ERROR;
         }
 
@@ -172,6 +183,7 @@ public class SparkDiagDevice extends DiagDeviceBase {
         // If we've run long enough and still no meaningful motion, latch failure
         if (stepCount >= MAX_STEPS) {
             testFailed = true;
+            // System.out.println("sp5");
             return SparkDiagStatus.S_CMD_ERROR;  // Spark+NEO did not move
         }
 

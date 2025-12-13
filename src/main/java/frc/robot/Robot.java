@@ -19,7 +19,7 @@ public class Robot extends TimedRobot {
     @Override
     public void robotInit() {
 
-        System.out.println("RobotInit: diag start");
+        // System.out.println("RobotInit: diag start");
 
         shooterDev = new SparkDiagDevice("ShooterMotor", 40, MotorType.kBrushless, 0.25);
         intakeDev  = new SparkDiagDevice("IntakeMotor",  41, MotorType.kBrushless, 0.20);
@@ -30,7 +30,7 @@ public class Robot extends TimedRobot {
         shooterDev.addTerminator(limitTop, true);
         shooterDev.addTerminator(shootTimer, false);
 
-        System.out.println("RobotInit: diag end");
+        // System.out.println("RobotInit: diag end");
     }
 
     @Override

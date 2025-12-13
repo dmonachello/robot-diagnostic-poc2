@@ -39,14 +39,19 @@ public abstract class DiagDeviceBase {
     private static final class TermBinding {
         final DiagTerminatorInterface term;
         final String useKey;        // Diag/<dut>/UseTerm_<termName>
+
         int lastTermStatus;         // last observed
         String lastTermDebug;       // last observed (if provided)
+
+        // DUT-side arming latch: prevents repeated arm/disarm calls every periodic.
+        boolean armed;
 
         TermBinding(DiagTerminatorInterface term, String useKey) {
             this.term = term;
             this.useKey = useKey;
             this.lastTermStatus = DiagStatus32.TERM_CONTINUE;
             this.lastTermDebug = "";
+            this.armed = false;
         }
     }
 
@@ -144,6 +149,7 @@ public abstract class DiagDeviceBase {
             for (TermBinding b : terminators) {
                 b.lastTermStatus = DiagStatus32.TERM_CONTINUE;
                 b.lastTermDebug = "";
+                b.armed = false;
             }
 
             updateDashboard(enable, false);
@@ -186,7 +192,9 @@ public abstract class DiagDeviceBase {
             lastInitStatus = openHardware();
             running = true;
 
-            armTerminatorsForThisRun();
+            // We do NOT arm everything blindly here.
+            // We arm based on UseTerm_* state transitions via syncTerminatorsArming().
+            syncTerminatorsArming();
 
             onTestStart();
 
@@ -204,6 +212,10 @@ public abstract class DiagDeviceBase {
                 updateDashboard(enable, retry);
                 return;
             }
+        } else {
+            // While running, allow UseTerm_* toggles to take effect immediately.
+            // This only calls arm/disarm on transitions (no repeated work per cycle).
+            syncTerminatorsArming();
         }
 
         // Check terminators first
@@ -250,24 +262,54 @@ public abstract class DiagDeviceBase {
     // Terminators
     // ----------------------------------------------------------------
 
-    private void armTerminatorsForThisRun() {
-        for (TermBinding b : terminators) {
-            boolean use = SmartDashboard.getBoolean(b.useKey, false);
-            if (!use) {
-                continue;
-            }
+    /**
+     * Synchronize terminator arming with the current UseTerm_* toggle states.
+     *
+     * Key rule for performance/safety:
+     * - armForTest()/disarmForTest() must only be called on transitions.
+     *   This ensures terminators do not repeatedly open/close hardware or reset timers
+     *   every periodic cycle.
+     */
+    private void syncTerminatorsArming() {
 
-            if (b.term instanceof TerminatorDeviceBase) {
-                ((TerminatorDeviceBase) b.term).armForTest();
+        for (TermBinding b : terminators) {
+
+            boolean use = SmartDashboard.getBoolean(b.useKey, false);
+
+            if (use && !b.armed) {
+                // Rising edge: start using this terminator now
+                try {
+                    b.term.armForTest();
+                } catch (Exception ignored) {
+                }
+                b.armed = true;
+                // leave lastTermStatus/debug as-is until evaluated
+            } else if (!use && b.armed) {
+                // Falling edge: stop using this terminator now
+                try {
+                    b.term.disarmForTest();
+                } catch (Exception ignored) {
+                }
+                b.armed = false;
+
+                b.lastTermStatus = DiagStatus32.TERM_CONTINUE;
+                b.lastTermDebug = "";
             }
         }
     }
 
     private void disarmAllTerminators() {
         for (TermBinding b : terminators) {
-            if (b.term instanceof TerminatorDeviceBase) {
-                ((TerminatorDeviceBase) b.term).disarmForTest();
+            if (b.armed) {
+                try {
+                    b.term.disarmForTest();
+                } catch (Exception ignored) {
+                }
+                b.armed = false;
             }
+
+            b.lastTermStatus = DiagStatus32.TERM_CONTINUE;
+            b.lastTermDebug = "";
         }
     }
 
@@ -277,6 +319,14 @@ public abstract class DiagDeviceBase {
 
             boolean use = SmartDashboard.getBoolean(b.useKey, false);
             if (!use) {
+                b.lastTermStatus = DiagStatus32.TERM_CONTINUE;
+                b.lastTermDebug = "";
+                continue;
+            }
+
+            // If UseTerm is true, syncTerminatorsArming() should have armed it already.
+            // Still guard: if not armed for any reason, treat as continue.
+            if (!b.armed) {
                 b.lastTermStatus = DiagStatus32.TERM_CONTINUE;
                 b.lastTermDebug = "";
                 continue;
@@ -395,6 +445,7 @@ public abstract class DiagDeviceBase {
                 sb.append(" [");
                 sb.append(b.term.getTerminatorName());
                 sb.append(" use=").append(use ? "1" : "0");
+                sb.append(" armed=").append(b.armed ? "1" : "0");
                 sb.append(" last=").append(String.format("0x%08X", b.lastTermStatus));
                 if (b.lastTermDebug != null && !b.lastTermDebug.isEmpty()) {
                     sb.append(" dbg=").append(b.lastTermDebug);

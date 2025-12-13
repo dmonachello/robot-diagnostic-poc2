@@ -26,14 +26,10 @@ public class LimitSwitchDiagDevice extends TerminatorDeviceBase {
         try {
             closeHardware();
             input = new DigitalInput(dioChannel);
-            lastRaw = -1;
-            lastPressed = -1;
-            return LimitSwitchDiagStatus.S_INIT_OK;
+            return DiagStatus32.S_INIT_OK;
         } catch (Exception e) {
             input = null;
-            lastRaw = -1;
-            lastPressed = -1;
-            return LimitSwitchDiagStatus.S_INIT_FAIL;
+            return DiagStatus32.S_INIT_FAIL;
         }
     }
 
@@ -56,10 +52,11 @@ public class LimitSwitchDiagDevice extends TerminatorDeviceBase {
         try {
             boolean raw = input.get();
             lastRaw = raw ? 1 : 0;
-            lastPressed = raw ? 0 : 1;  // typical pull-up wiring
-            return LimitSwitchDiagStatus.S_READ_OK;
+            lastPressed = raw ? 0 : 1;  // typical pull-up wiring (pressed => raw false)
+
+            return DiagStatus32.S_TEST_OK;
         } catch (Exception e) {
-            return LimitSwitchDiagStatus.S_READ_FAULT;
+            return DiagStatus32.S_HW_FAULT;
         }
     }
 
@@ -70,19 +67,28 @@ public class LimitSwitchDiagDevice extends TerminatorDeviceBase {
 
     @Override
     protected int evalTerminatorStatus() {
+
+        // This must be an error now.
+        // If we are armed and evaluating, the hardware should already be opened.
         if (input == null) {
+            return LimitSwitchDiagStatus.S_INPUT_NULL;
+        }
+
+        try {
+            boolean raw = input.get();
+            lastRaw = raw ? 1 : 0;
+            lastPressed = raw ? 0 : 1;  // typical pull-up wiring
+
+            boolean pressed = (lastPressed == 1);
+            if (pressed) {
+                return DiagStatus32.TERM_TEST_TERMINATED_OK;
+            }
+
             return DiagStatus32.TERM_CONTINUE;
+
+        } catch (Exception e) {
+            return DiagStatus32.TERM_TEST_TERMINATED_BAD;
         }
-
-        boolean raw = input.get();
-        lastRaw = raw ? 1 : 0;
-        lastPressed = raw ? 0 : 1;  // typical pull-up wiring
-
-        if (lastPressed == 1) {
-            return DiagStatus32.TERM_TEST_TERMINATED_OK;
-        }
-
-        return DiagStatus32.TERM_CONTINUE;
     }
 
     @Override

@@ -14,6 +14,7 @@ public final class LimitSwitchDiagStatus {
     private static final int CODE_INIT_FAIL  = 2;
     private static final int CODE_READ_OK    = 3;
     private static final int CODE_READ_FAULT = 4;
+    private static final int CODE_INPUT_NULL = 50;
 
     public static final int S_INIT_OK = DiagStatus32.defineStatus(
             CTRL_NONE,
@@ -42,6 +43,14 @@ public final class LimitSwitchDiagStatus {
             CODE_READ_FAULT,
             DiagStatus32.SEV_ERROR,
             "Limit switch read fault");
+
+    public static final int S_INPUT_NULL =
+    DiagStatus32.defineStatus(
+            CTRL_NONE,
+            DiagStatus32.FAC_TERMINATOR,
+            CODE_INPUT_NULL,
+            DiagStatus32.SEV_ERROR,
+            "limit switch input not initialized");
 
     private LimitSwitchDiagStatus() {}
 }
