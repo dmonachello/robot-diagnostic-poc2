@@ -1,0 +1,46 @@
++----+-------------------+-------------------+--------------------+-----------------------------------------------+
+| #  | Current State     | Event             | Next State         | Comments                                      |
++----+-------------------+-------------------+--------------------+-----------------------------------------------+
+|  1 | IDLE              | ENABLE_ON         | INIT               | User toggles Enable on                        |
+|  2 | IDLE              | ENABLE_OFF        | IDLE               | No-op                                         |
+|  3 | IDLE              | RETRY             | IDLE               | Clear all latched results                     |
++----+-------------------+-------------------+--------------------+-----------------------------------------------+
+|  4 | INIT              | INIT_OK           | TESTING            | Hardware opened successfully                  |
+|  5 | INIT              | INIT_FAIL         | FINISHED_BAD       | Init failure is fatal                         |
+|  6 | INIT              | ENABLE_OFF        | IDLE               | User cancels during init                      |
+|  7 | INIT              | RETRY             | IDLE               | Close hardware and reset                      |
++----+-------------------+-------------------+--------------------+-----------------------------------------------+
+|  8 | TESTING           | TERM_OK           | TERMINATED_GOOD    | Terminator stopped test safely                |
+|  9 | TESTING           | TERM_BAD          | TERMINATED_BAD     | Terminator stopped test with fault            |
+| 10 | TESTING           | STEP_OK           | TESTING            | Normal test step                              |
+| 11 | TESTING           | STEP_WARN         | TESTING            | Warning only, continue                        |
+| 12 | TESTING           | STEP_ERR          | FINISHED_BAD       | Test failure                                  |
+| 13 | TESTING           | ENABLE_OFF        | IDLE               | User stops test manually                      |
+| 14 | TESTING           | RETRY             | IDLE               | Full reset                                    |
++----+-------------------+-------------------+--------------------+-----------------------------------------------+
+| 15 | TERMINATED_GOOD   | ENABLE_ON         | TERMINATED_GOOD    | Ignore (prevents auto-restart)                |
+| 16 | TERMINATED_BAD    | ENABLE_ON         | TERMINATED_BAD     | Ignore                                        |
+| 17 | TERMINATED_GOOD   | ENABLE_OFF        | IDLE               | User must toggle off to restart               |
+| 18 | TERMINATED_BAD    | ENABLE_OFF        | IDLE               | User must toggle off to restart               |
+| 19 | TERMINATED_GOOD   | RETRY             | IDLE               | Clear termination latch                       |
+| 20 | TERMINATED_BAD    | RETRY             | IDLE               | Clear termination latch                       |
++----+-------------------+-------------------+--------------------+-----------------------------------------------+
+| 21 | FINISHED_BAD      | ENABLE_ON         | FINISHED_BAD       | Ignore                                        |
+| 22 | FINISHED_BAD      | ENABLE_OFF        | IDLE               | Ready for new test                            |
+| 23 | FINISHED_BAD      | RETRY             | IDLE               | Clear failure latch                           |
++----+-------------------+-------------------+--------------------+-----------------------------------------------+
+
++----+-------------------+------------------------+-------------------+----------------------------------------------+
+| #  | Current State     | Event                  | Next State        | Comments                                     |
++----+-------------------+------------------------+-------------------+----------------------------------------------+
+|  1 | IDLE              | DUT_TEST_START         | ARMED             | DUT entered TESTING                          |
+|  2 | IDLE              | DUT_TEST_END           | IDLE              | No-op                                        |
++----+-------------------+------------------------+-------------------+----------------------------------------------+
+|  3 | ARMED             | CONDITION_OK           | ARMED             | Condition not met yet                        |
+|  4 | ARMED             | CONDITION_GOOD         | FIRED_GOOD        | Safety condition met                         |
+|  5 | ARMED             | CONDITION_BAD          | FIRED_BAD         | Fault condition met                          |
+|  6 | ARMED             | DUT_TEST_END           | IDLE              | Disarmed when DUT stops                      |
++----+-------------------+------------------------+-------------------+----------------------------------------------+
+|  7 | FIRED_GOOD        | ANY                    | FIRED_GOOD        | Latched until DUT resets                     |
+|  8 | FIRED_BAD         | ANY                    | FIRED_BAD         | Latched until DUT resets                     |
++----+-------------------+------------------------+-------------------+----------------------------------------------+

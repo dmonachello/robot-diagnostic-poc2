@@ -8,10 +8,7 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 public abstract class DiagDeviceBase {
 
-    // --------------------------------------------------------------
     // Global device list
-    // --------------------------------------------------------------
-
     private static final List<DiagDeviceBase> DEVICES = new ArrayList<>();
 
     public static List<DiagDeviceBase> getDevices() {
@@ -30,51 +27,54 @@ public abstract class DiagDeviceBase {
         }
     }
 
-    // --------------------------------------------------------------
+    // ----------------------------------------------------------------
     // Instance fields
-    // --------------------------------------------------------------
+    // ----------------------------------------------------------------
 
     protected final String diagName;
     protected final String baseKey;   // "Diag/<name>/"
 
     protected final DiagDeviceStatus status = new DiagDeviceStatus();
 
-    private static class TerminatorBinding {
+    private static final class TermBinding {
         final DiagTerminatorInterface term;
-        final String label;
-        final boolean defaultUse;
+        final String useKey;        // Diag/<dut>/UseTerm_<termName>
+        int lastTermStatus;         // last observed
+        String lastTermDebug;       // last observed (if provided)
 
-        TerminatorBinding(DiagTerminatorInterface term, String label, boolean defaultUse) {
+        TermBinding(DiagTerminatorInterface term, String useKey) {
             this.term = term;
-            this.label = label;
-            this.defaultUse = defaultUse;
+            this.useKey = useKey;
+            this.lastTermStatus = 0;
+            this.lastTermDebug = "";
         }
     }
 
-    private final List<TerminatorBinding> terminators = new ArrayList<>();
+    private final List<TermBinding> terminators = new ArrayList<>();
 
     // Status tracking
-    private int  lastInitStatus = 0;
-    private int  lastTestStatus = 0;
-    private boolean everRan     = false;
+    private int lastInitStatus = 0;
+    private int lastTestStatus = 0;
+    private boolean everRan    = false;
 
     // Runtime state
     private boolean running       = false;
     private boolean testCompleted = false;
 
+    // Who terminated the test (for StatusSummary)
+    private String lastFiredTerminatorName = "";
+    private int lastFiredTerminatorStatus = 0;
+
     // Dashboard init guard
     private boolean dashboardInitialized = false;
 
-    // Which terminator stopped the last test (if any)
-    private String lastTerminatorLabel = null;
-
-    // --------------------------------------------------------------
+    // ----------------------------------------------------------------
     // Construction
-    // --------------------------------------------------------------
+    // ----------------------------------------------------------------
 
     public DiagDeviceBase(String diagName) {
         this.diagName = diagName;
-        this.baseKey  = "Diag/" + diagName + "/";
+        this.baseKey = "Diag/" + diagName + "/";
         DEVICES.add(this);
     }
 
@@ -82,220 +82,334 @@ public abstract class DiagDeviceBase {
         return diagName;
     }
 
-    // --------------------------------------------------------------
+    // ----------------------------------------------------------------
     // Subclass API
-    // --------------------------------------------------------------
+    // ----------------------------------------------------------------
 
-    protected abstract int  openHardware();
+    protected abstract int openHardware();
     protected abstract void closeHardware();
-    protected abstract int  runHardwareTest();
+    protected abstract int runHardwareTest();
     protected abstract void stopHardware();
 
-    // Optional hooks for DUTs (not terminators)
-    public void onTestStart() {}
-    public void onTestEnd()   {}
+    // Optional hooks (devices may override)
+    protected void onTestStart() {}
+    protected void onTestEnd() {}
 
-    // --------------------------------------------------------------
-    // Main periodic
-    // --------------------------------------------------------------
+    // Optional debug details hook (devices may override)
+    protected String getDebugStateExtra() {
+        return "";
+    }
+
+    // ----------------------------------------------------------------
+    // Periodic
+    // ----------------------------------------------------------------
 
     public void periodic() {
-        ensureDashboardKeys();
-        updateDashboard();
+
+        // IMPORTANT:
+        // First time through, force dashboard keys to known defaults and
+        // return immediately. This prevents a stale Enable=true from the
+        // previous run from starting hardware the instant teleop enables.
+        if (!dashboardInitialized) {
+            updateDashboard(false, false);
+            return;
+        }
 
         boolean enable = SmartDashboard.getBoolean(baseKey + "Enable", false);
-        boolean retry  = SmartDashboard.getBoolean(baseKey + "Retry",  false);
+        boolean retry  = SmartDashboard.getBoolean(baseKey + "Retry", false);
 
-        // Retry: full reset and re-open on next enabled cycle
+        // Always publish, even if we return early
+        updateDashboard(enable, retry);
+
+        // Retry: edge-triggered behavior
         if (retry) {
             SmartDashboard.putBoolean(baseKey + "Retry", false);
+
+            disarmAllTerminators();
 
             if (running) {
                 stopHardware();
                 onTestEnd();
-                notifyTerminatorsEnd();
                 running = false;
             }
             closeHardware();
 
-            lastInitStatus      = 0;
-            lastTestStatus      = 0;
-            everRan             = false;
-            testCompleted       = false;
-            lastTerminatorLabel = null;
+            lastInitStatus  = 0;
+            lastTestStatus  = 0;
+            everRan         = false;
+            testCompleted   = false;
 
-            updateDashboard();
+            lastFiredTerminatorName = "";
+            lastFiredTerminatorStatus = 0;
+
+            for (TermBinding b : terminators) {
+                b.lastTermStatus = 0;
+                b.lastTermDebug = "";
+            }
+
+            updateDashboard(enable, false);
             return;
         }
 
-        // Not enabled: stop if running, but keep last result
+        // Not enabled: stop motor, clear completion latch so Enable can re-run
         if (!enable) {
+
+            disarmAllTerminators();
+
             if (running) {
                 stopHardware();
                 onTestEnd();
-                notifyTerminatorsEnd();
                 running = false;
             }
-            updateDashboard();
+            testCompleted = false;
+
+            // Clear "who terminated" when operator disables
+            lastFiredTerminatorName = "";
+            lastFiredTerminatorStatus = 0;
+
+            updateDashboard(enable, retry);
             return;
         }
 
-        // Already completed (by terminator or fatal init)
+        // If a previous run ended due to terminator/fatal, do not auto-restart
         if (testCompleted) {
-            updateDashboard();
+            updateDashboard(enable, retry);
             return;
         }
 
-        // First time after enable → init
+        // Start test if not running yet
         if (!running) {
+
+            // Clear prior terminator attribution for the new run
+            lastFiredTerminatorName = "";
+            lastFiredTerminatorStatus = 0;
+
             lastInitStatus = openHardware();
             running = true;
 
-            onTestStart();
-            notifyTerminatorsStart();
+            armTerminatorsForThisRun();
 
-            // Init failure counts as a completed test
+            onTestStart();
+
             if (DiagStatus32.getSeverity(lastInitStatus) >= DiagStatus32.SEV_ERROR) {
                 lastTestStatus = lastInitStatus;
-                everRan        = true;
+                everRan = true;
+
+                disarmAllTerminators();
 
                 stopHardware();
                 onTestEnd();
-                notifyTerminatorsEnd();
-                running       = false;
+                running = false;
                 testCompleted = true;
 
-                updateDashboard();
+                updateDashboard(enable, retry);
                 return;
             }
         }
 
         // Check terminators first
-        lastTerminatorLabel = null;
         int termStatus = checkTerminators();
         if (termStatus != 0) {
             lastTestStatus = termStatus;
-            everRan        = true;
+            everRan = true;
+
+            disarmAllTerminators();
 
             stopHardware();
             onTestEnd();
-            notifyTerminatorsEnd();
-            running       = false;
+            running = false;
             testCompleted = true;
 
-            updateDashboard();
+            updateDashboard(enable, retry);
             return;
         }
 
         // Normal test step
         int stepStatus = runHardwareTest();
         lastTestStatus = stepStatus;
-        everRan        = true;
+        everRan = true;
 
-        updateDashboard();
+        updateDashboard(enable, retry);
     }
 
     public void stopTesting() {
+
+        disarmAllTerminators();
+
         if (running) {
             stopHardware();
             onTestEnd();
-            notifyTerminatorsEnd();
             running = false;
         }
+        testCompleted = false;
+
+        lastFiredTerminatorName = "";
+        lastFiredTerminatorStatus = 0;
     }
 
-    // --------------------------------------------------------------
+    // ----------------------------------------------------------------
     // Terminators
-    // --------------------------------------------------------------
+    // ----------------------------------------------------------------
 
-    private int checkTerminators() {
-        for (TerminatorBinding b : terminators) {
-            String key = baseKey + "UseTerm_" + b.label;
-            boolean use = SmartDashboard.getBoolean(key, b.defaultUse);
-            SmartDashboard.putBoolean(key, use);   // keep NT in sync
-
+    private void armTerminatorsForThisRun() {
+        for (TermBinding b : terminators) {
+            boolean use = SmartDashboard.getBoolean(b.useKey, false);
             if (!use) {
                 continue;
             }
 
+            if (b.term instanceof TerminatorDeviceBase) {
+                ((TerminatorDeviceBase) b.term).armForTest();
+            }
+        }
+    }
+
+    private void disarmAllTerminators() {
+        for (TermBinding b : terminators) {
+            if (b.term instanceof TerminatorDeviceBase) {
+                ((TerminatorDeviceBase) b.term).disarmForTest();
+            }
+        }
+    }
+
+    private int checkTerminators() {
+
+        for (TermBinding b : terminators) {
+
+            boolean use = SmartDashboard.getBoolean(b.useKey, false);
+            if (!use) {
+                b.lastTermStatus = 0;
+                b.lastTermDebug = "";
+                continue;
+            }
+
             int s = b.term.getTerminatorStatus();
+            b.lastTermStatus = s;
+
+            String dbg = "";
+            try {
+                dbg = b.term.getTerminatorDebug();
+            } catch (Exception ignored) {
+            }
+            b.lastTermDebug = (dbg != null) ? dbg : "";
+
             if (s != 0) {
-                lastTerminatorLabel = b.label;
+                lastFiredTerminatorName = b.term.getTerminatorName();
+                lastFiredTerminatorStatus = s;
                 return s;
             }
         }
+
         return 0;
     }
 
-    private void notifyTerminatorsStart() {
-        for (TerminatorBinding b : terminators) {
-            String key = baseKey + "UseTerm_" + b.label;
-            boolean use = SmartDashboard.getBoolean(key, b.defaultUse);
-            SmartDashboard.putBoolean(key, use);
-
-            if (use) {
-                b.term.onTestStart();
-            } else {
-                b.term.onTestEnd();
-            }
-        }
-    }
-
-    private void notifyTerminatorsEnd() {
-        for (TerminatorBinding b : terminators) {
-            b.term.onTestEnd();
-        }
-    }
-
-    public void addTerminator(DiagTerminatorInterface term) {
-        addTerminator(term, term.getTerminatorName(), true);
-    }
-
-    public void addTerminator(DiagTerminatorInterface term,
-                              String label,
-                              boolean defaultUse) {
+    // B form: term + default UseTerm_* setting
+    public void addTerminator(DiagTerminatorInterface term, boolean defaultUse) {
         if (term == null) {
             return;
         }
-        if (label == null || label.isEmpty()) {
-            label = term.getTerminatorName();
-        }
 
-        TerminatorBinding binding = new TerminatorBinding(term, label, defaultUse);
-        terminators.add(binding);
+        String useKey = baseKey + "UseTerm_" + term.getTerminatorName();
+        SmartDashboard.putBoolean(useKey, defaultUse);
 
-        // If dashboard already initialized, seed the UseTerm_* entry now
-        if (dashboardInitialized) {
-            String key = baseKey + "UseTerm_" + label;
-            SmartDashboard.putBoolean(key, defaultUse);
-        }
+        terminators.add(new TermBinding(term, useKey));
     }
 
-    // --------------------------------------------------------------
+    public void addTerminator(DiagTerminatorInterface term) {
+        addTerminator(term, false);
+    }
+
+    // ----------------------------------------------------------------
     // Dashboard helpers
-    // --------------------------------------------------------------
+    // ----------------------------------------------------------------
 
-    private void ensureDashboardKeys() {
-        if (dashboardInitialized) {
-            return;
+    private void updateDashboard(boolean enable, boolean retry) {
+
+        if (!dashboardInitialized) {
+            dashboardInitialized = true;
+
+            // Force known defaults on first contact
+            SmartDashboard.putBoolean(baseKey + "Enable", false);
+            SmartDashboard.putBoolean(baseKey + "Retry",  false);
+
+            SmartDashboard.putString(baseKey + "LastStatusHex", "0x00000000");
+            SmartDashboard.putString(baseKey + "Health",        "UNKNOWN");
+            SmartDashboard.putString(baseKey + "StatusSummary", "test not run");
+            SmartDashboard.putString(baseKey + "State",         "IDLE");
+            SmartDashboard.putString(baseKey + "DebugState",    "init");
         }
-        dashboardInitialized = true;
 
-        SmartDashboard.putBoolean(baseKey + "Enable", false);
-        SmartDashboard.putBoolean(baseKey + "Retry",  false);
-
-        for (TerminatorBinding b : terminators) {
-            String key = baseKey + "UseTerm_" + b.label;
-            SmartDashboard.putBoolean(key, b.defaultUse);
-        }
-    }
-
-    private void updateDashboard() {
         status.setLastStatus(lastTestStatus);
 
         SmartDashboard.putString(baseKey + "LastStatusHex", status.getLastStatusHex());
         SmartDashboard.putString(baseKey + "Health",        computeHealth());
         SmartDashboard.putString(baseKey + "StatusSummary", computeSummary());
+
+        SmartDashboard.putString(baseKey + "State",      computeState(enable, retry));
+        SmartDashboard.putString(baseKey + "DebugState", computeDebugState(enable, retry));
+    }
+
+    private String computeState(boolean enable, boolean retry) {
+        if (!enable) {
+            return "IDLE";
+        }
+        if (retry) {
+            return "RETRY";
+        }
+        if (running) {
+            return "TESTING";
+        }
+        if (testCompleted) {
+            int sev = DiagStatus32.getSeverity(lastTestStatus);
+            if (sev == DiagStatus32.SEV_SUCCESS || sev == DiagStatus32.SEV_INFO) {
+                return "FINISHED_GOOD";
+            }
+            if (sev >= DiagStatus32.SEV_ERROR) {
+                return "FINISHED_BAD";
+            }
+            return "FINISHED_WARN";
+        }
+        return "INIT";
+    }
+
+    private String computeDebugState(boolean enable, boolean retry) {
+
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("enable=").append(enable ? "1" : "0");
+        sb.append(" retry=").append(retry ? "1" : "0");
+        sb.append(" running=").append(running ? "1" : "0");
+        sb.append(" completed=").append(testCompleted ? "1" : "0");
+        sb.append(" everRan=").append(everRan ? "1" : "0");
+
+        sb.append(" init=").append(String.format("0x%08X", lastInitStatus));
+        sb.append(" test=").append(String.format("0x%08X", lastTestStatus));
+
+        if (!lastFiredTerminatorName.isEmpty()) {
+            sb.append(" fired=").append(lastFiredTerminatorName);
+        }
+
+        if (!terminators.isEmpty()) {
+            sb.append(" terms=").append(terminators.size());
+            for (TermBinding b : terminators) {
+                boolean use = SmartDashboard.getBoolean(b.useKey, false);
+                sb.append(" [");
+                sb.append(b.term.getTerminatorName());
+                sb.append(" use=").append(use ? "1" : "0");
+                sb.append(" last=").append(String.format("0x%08X", b.lastTermStatus));
+                if (b.lastTermDebug != null && !b.lastTermDebug.isEmpty()) {
+                    sb.append(" dbg=").append(b.lastTermDebug);
+                }
+                sb.append("]");
+            }
+        }
+
+        String extra = getDebugStateExtra();
+        if (extra != null && !extra.isEmpty()) {
+            sb.append(" | ").append(extra);
+        }
+
+        return sb.toString();
     }
 
     private String computeHealth() {
@@ -331,10 +445,9 @@ public abstract class DiagDeviceBase {
 
         String msg = DiagStatus32.getMessage(lastTestStatus);
 
-        // If a terminator fired, append its label
-        int fac = DiagStatus32.getFacility(lastTestStatus);
-        if (fac == DiagStatus32.FAC_TERMINATOR && lastTerminatorLabel != null) {
-            msg = msg + " (" + lastTerminatorLabel + ")";
+        // Add "who terminated" when termination was caused by a terminator
+        if (!lastFiredTerminatorName.isEmpty() && lastTestStatus == lastFiredTerminatorStatus) {
+            msg = msg + " (by " + lastFiredTerminatorName + ")";
         }
 
         return prefix + msg;

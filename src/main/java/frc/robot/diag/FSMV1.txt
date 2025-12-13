@@ -1,0 +1,37 @@
++----+-------------------+--------------------------------------+-------------------+----------------------------------------------+
+| #  | Current State     | Event                                | Next State        | Comments                                     |
++----+-------------------+--------------------------------------+-------------------+----------------------------------------------+
+| 1  | IDLE              | Enable toggled ON                    | INIT              | Operator starts test                         |
+| 2  | IDLE              | Enable toggled OFF                   | IDLE              | No change                                    |
+| 3  | INIT              | openHardware() returns SEV_SUCCESS   | TESTING           | Hardware initialized successfully            |
+| 4  | INIT              | openHardware() returns ERROR/FATAL   | FINISHED_BAD      | Init failure ends test                       |
+| 5  | INIT              | Enable toggled OFF                   | IDLE              | Operator cancels before test                 |
+| 6  | TESTING           | runHardwareTest() SUCCESS/INFO       | TESTING           | Normal test progress                         |
+| 7  | TESTING           | runHardwareTest() WARNING            | TESTING           | Non-fatal warning                            |
+| 8  | TESTING           | runHardwareTest() ERROR/FATAL        | FINISHED_BAD      | DUT fault detected                           |
+| 9  | TESTING           | Terminator returns TERMINATED_OK     | TERMINATED_GOOD   | Test stopped cleanly by terminator           |
+| 10 | TESTING           | Terminator returns TERMINATED_BAD    | TERMINATED_BAD    | Test stopped by fault terminator             |
+| 11 | TESTING           | Enable toggled OFF                   | FINISHED_GOOD     | Operator stops test cleanly                  |
+| 12 | TERMINATED_GOOD   | Enable still ON                      | TERMINATED_GOOD   | Latched                                      |
+| 13 | TERMINATED_BAD    | Enable still ON                      | TERMINATED_BAD    | Latched                                      |
+| 14 | TERMINATED_GOOD   | Enable toggled OFF                   | IDLE              | Reset for next run                           |
+| 15 | TERMINATED_BAD    | Enable toggled OFF                   | IDLE              | Reset for next run                           |
+| 16 | FINISHED_GOOD     | Enable still ON                      | FINISHED_GOOD     | Result latched                               |
+| 17 | FINISHED_BAD      | Enable still ON                      | FINISHED_BAD      | Result latched                               |
+| 18 | FINISHED_GOOD     | Enable toggled OFF                   | IDLE              | Reset for next run                           |
+| 19 | FINISHED_BAD      | Enable toggled OFF                   | IDLE              | Reset for next run                           |
++----+-------------------+--------------------------------------+-------------------+----------------------------------------------+
+
++----+---------------+----------------------------------------------+-----------+----------------------------------------------+
+| #  | Current State | Event                                        | Next State| Comments                                     |
++----+---------------+----------------------------------------------+-----------+----------------------------------------------+
+| 1  | IDLE          | DUT enters INIT and UseTerm_* = ON           | ARMED     | Terminator armed for this DUT                |
+| 2  | IDLE          | DUT enters INIT and UseTerm_* = OFF          | IDLE      | Terminator ignored                           |
+| 3  | ARMED         | Termination condition not met                | ARMED     | Monitoring                                   |
+| 4  | ARMED         | Termination condition met (OK)               | FIRED     | Returns TERM_TEST_TERMINATED_OK              |
+| 5  | ARMED         | Termination condition met (BAD)              | FIRED     | Returns TERM_TEST_TERMINATED_BAD             |
+| 6  | ARMED         | DUT leaves TESTING                           | IDLE      | Disarmed automatically                       |
+| 7  | FIRED         | DUT still in TESTING                         | FIRED     | One-shot, latched                            |
+| 8  | FIRED         | DUT leaves TESTING                           | IDLE      | Reset for next test                          |
+| 9  | IDLE          | UseTerm_* toggled during TESTING             | IDLE      | No effect mid-test                           |
++----+---------------+----------------------------------------------+-----------+----------------------------------------------+

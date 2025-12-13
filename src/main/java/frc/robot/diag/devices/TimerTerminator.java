@@ -11,23 +11,29 @@ import frc.robot.diag.core.TerminatorDeviceBase;
  * As a terminator:
  *  - On each DUT test start, the timer is reset.
  *  - Once elapsed time exceeds durationSeconds, it returns
- *    TERM_TEST_TERMINATED_OK (one or more times).
+ *    TERM_TEST_TERMINATED_OK.
  */
 public class TimerTerminator extends TerminatorDeviceBase {
 
     private final double durationSeconds;
+
+    // Per-test timing
     private double startTimeSec = -1.0;
+
+    // Debug sampling
+    private double lastElapsedSec = 0.0;
 
     public TimerTerminator(String diagName, double durationSeconds) {
         super(diagName);
         this.durationSeconds = durationSeconds;
     }
 
-    // -------------------- Diag device side --------------------
+    // ---------------- Diag device side ----------------
 
     @Override
     protected int openHardware() {
         startTimeSec = -1.0;
+        lastElapsedSec = 0.0;
         return DiagStatus32.S_INIT_OK;
     }
 
@@ -38,7 +44,6 @@ public class TimerTerminator extends TerminatorDeviceBase {
 
     @Override
     protected int runHardwareTest() {
-        // As a first-class diag device, just report "test ok"
         return DiagStatus32.S_TEST_OK;
     }
 
@@ -47,34 +52,43 @@ public class TimerTerminator extends TerminatorDeviceBase {
         // Nothing to stop
     }
 
-    // -------------------- Terminator lifecycle --------------------
+    // ---------------- Terminator lifecycle ----------------
 
     @Override
     public void onTestStart() {
-        // Reset timer only for DUTs that actually use this terminator
         startTimeSec = -1.0;
+        lastElapsedSec = 0.0;
     }
 
     @Override
     public void onTestEnd() {
-        // leave startTimeSec; it will be reset next test
+        // leave values; reset on next test
     }
 
+    // ---------------- Terminator evaluation ----------------
+
     @Override
-    public int getTerminatorStatus() {
+    protected int evalTerminatorStatus() {
         double now = Timer.getFPGATimestamp();
 
         if (startTimeSec < 0.0) {
-            // First call after test start: capture baseline time
             startTimeSec = now;
+            lastElapsedSec = 0.0;
             return 0;
         }
 
-        double elapsed = now - startTimeSec;
-        if (elapsed >= durationSeconds) {
+        lastElapsedSec = now - startTimeSec;
+
+        if (lastElapsedSec >= durationSeconds) {
             return DiagStatus32.TERM_TEST_TERMINATED_OK;
         }
 
         return 0;
+    }
+
+    @Override
+    public String getTerminatorDebug() {
+        return String.format("elapsed=%.2f dur=%.2f",
+                lastElapsedSec, durationSeconds);
     }
 }
