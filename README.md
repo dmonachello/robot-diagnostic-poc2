@@ -1,3 +1,5 @@
+Warning!!! This is nowhere near a finished project. I hope someday it will be! DRM 12/13/25
+
 ## Overview
 
 This project provides a standalone diagnostic robot program for FIRST Robotics Competition (FRC) robots, focused on hardware and wiring validation.
