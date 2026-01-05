@@ -1,5 +1,7 @@
 package frc.robot.diag.vendor.rev;
 
+import java.util.Optional;
+
 import com.revrobotics.RelativeEncoder;
 import com.revrobotics.spark.SparkLowLevel.MotorType;
 import com.revrobotics.spark.SparkMax;
@@ -135,6 +137,7 @@ public class SparkDiagDevice extends DiagDeviceBase {
             maxDelta = 0.0;
             stepCount = 0;
             testActive = true;
+            
 
             // Start driving immediately
             try {

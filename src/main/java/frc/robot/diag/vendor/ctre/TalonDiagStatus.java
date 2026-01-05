@@ -2,8 +2,9 @@ package frc.robot.diag.vendor.ctre;
 
 import frc.robot.diag.core.DiagStatus32;
 
-/**
+/*
  * Talon (CTRE) specific diagnostic status codes.
+ * Mirrors SparkDiagStatus structure.
  */
 public final class TalonDiagStatus {
 
@@ -19,15 +20,15 @@ public final class TalonDiagStatus {
             CTRL_NONE,
             FAC_TALON,
             CODE_OPEN_OK,
-            DiagStatus32.SEV_SUCCESS,
+            DiagStatus32.SEV_INFO,
             "Talon open ok");
 
     public static final int S_OPEN_FATAL = DiagStatus32.defineStatus(
             CTRL_NONE,
             FAC_TALON,
             CODE_OPEN_FATAL,
-            DiagStatus32.SEV_FATAL,
-            "Talon open fatal");
+            DiagStatus32.SEV_ERROR,
+            "Talon open failed");
 
     public static final int S_CMD_OK = DiagStatus32.defineStatus(
             CTRL_NONE,

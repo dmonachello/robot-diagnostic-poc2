@@ -359,7 +359,9 @@ public abstract class DiagDeviceBase {
         }
 
         String useKey = baseKey + "UseTerm_" + term.getTerminatorName();
-        SmartDashboard.putBoolean(useKey, defaultUse);
+        SmartDashboard.getEntry(useKey).setDefaultBoolean(defaultUse);
+
+//        SmartDashboard.putBoolean(useKey, defaultUse);
 
         terminators.add(new TermBinding(term, useKey));
     }
@@ -378,9 +380,19 @@ public abstract class DiagDeviceBase {
             dashboardInitialized = true;
 
             // Force known defaults on first contact
-            SmartDashboard.putBoolean(baseKey + "Enable", false);
-            SmartDashboard.putBoolean(baseKey + "Retry",  false);
 
+            SmartDashboard.getEntry(baseKey + "Enable").setDefaultBoolean(false);
+            SmartDashboard.getEntry(baseKey + "Retry").setDefaultBoolean(false);
+            
+            SmartDashboard.getEntry(baseKey + "LastStatusHex").setDefaultString(String.format("0x%08X", DiagStatus32.S_UNSET));
+            SmartDashboard.getEntry(baseKey + "Health").setDefaultString("UNKNOWN");
+            SmartDashboard.getEntry(baseKey + "StatusSummary").setDefaultString("test not run");
+            SmartDashboard.getEntry(baseKey + "State").setDefaultString("IDLE");
+            SmartDashboard.getEntry(baseKey + "DebugState").setDefaultString("init");
+            
+            // SmartDashboard.putBoolean(baseKey + "Enable", false);
+            // SmartDashboard.putBoolean(baseKey + "Retry",  false);
+            
             SmartDashboard.putString(baseKey + "LastStatusHex", String.format("0x%08X", DiagStatus32.S_UNSET));
             SmartDashboard.putString(baseKey + "Health",        "UNKNOWN");
             SmartDashboard.putString(baseKey + "StatusSummary", "test not run");
