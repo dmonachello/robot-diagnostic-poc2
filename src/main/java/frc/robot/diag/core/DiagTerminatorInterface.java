@@ -13,16 +13,21 @@ package frc.robot.diag.core;
  */
 public interface DiagTerminatorInterface {
 
-    // Called by the DUT when this terminator is being used for a test run.
+    /**
+     * Called by the DUT when this terminator is entering active use for a test run.
+     * Terminators should (re)open hardware here if needed and reset any per-run state.
+     */
     void armForTest();
 
-    // Called by the DUT when this terminator is no longer being used for a test run.
+    /**
+     * Called by the DUT when this terminator is no longer being used for the current run.
+     * Terminators may stop polling hardware, etc.
+     */
     void disarmForTest();
 
     /**
-     * Returns a status code:
-     * - DiagStatus32.TERM_CONTINUE means "keep going"
-     * - any other value means "terminate now using that status"
+     * Return a terminator status code.
+     * Use DiagStatus32.TERM_CONTINUE when the terminator does NOT want to stop the DUT.
      */
     int getTerminatorStatus();
 
