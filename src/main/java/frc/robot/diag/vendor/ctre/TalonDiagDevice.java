@@ -6,6 +6,7 @@ import com.ctre.phoenix6.hardware.TalonFX;
 import edu.wpi.first.units.Units;
 
 import frc.robot.diag.core.DiagDeviceBase;
+import frc.robot.diag.core.DiagPositionProvider;
 import frc.robot.diag.core.DiagStatus32;
 
 /**
@@ -17,7 +18,7 @@ import frc.robot.diag.core.DiagStatus32;
  * - First motor command is issued in onTestStart().
  * - runHardwareTest() only maintains output and samples last-known values.
  */
-public class TalonDiagDevice extends DiagDeviceBase {
+public class TalonDiagDevice extends DiagDeviceBase implements DiagPositionProvider {
 
     private final int    canId;
     private final double testDuty;
@@ -100,5 +101,14 @@ public class TalonDiagDevice extends DiagDeviceBase {
                 + " out=" + String.format("%.2f", lastOutPct)
                 + " busV=" + String.format("%.1f", lastBusV)
                 + ")";
+    }
+
+    @Override
+    public double getPositionRotations() {
+        try {
+            return motor.getPosition().getValue().in(Units.Rotations);
+        } catch (Exception e) {
+            return 0.0;
+        }
     }
 }

@@ -7,6 +7,7 @@ import com.revrobotics.spark.SparkLowLevel.MotorType;
 import com.revrobotics.spark.SparkMax;
 
 import frc.robot.diag.core.DiagDeviceBase;
+import frc.robot.diag.core.DiagPositionProvider;
 //import frc.robot.diag.core.DiagStatus32;
 
 /**
@@ -24,7 +25,7 @@ import frc.robot.diag.core.DiagDeviceBase;
  * keep reporting an error status on further test calls until it is
  * re-opened (e.g. after a Retry).
  */
-public class SparkDiagDevice extends DiagDeviceBase {
+public class SparkDiagDevice extends DiagDeviceBase implements DiagPositionProvider {
 
     private final int canId;
     private final MotorType motorType;
@@ -218,5 +219,10 @@ public class SparkDiagDevice extends DiagDeviceBase {
             // If encoder read blows up, treat as "no movement"
             return 0.0;
         }
+    }
+
+    @Override
+    public double getPositionRotations() {
+        return safeGetPosition();
     }
 }

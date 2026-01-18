@@ -27,6 +27,7 @@ public abstract class DiagDeviceBase {
 
     private static boolean runActive = false;
     private static int runId = 0;
+    private static double runStartTimeSec = 0.0;
 
     // Latches so toggle buttons act like one-shots
     private static boolean startConsumedWhileHigh = false;
@@ -83,7 +84,8 @@ public abstract class DiagDeviceBase {
 
             SmartDashboard.putNumber(GLOBAL_RUNID_KEY, runId);
             SmartDashboard.putBoolean(GLOBAL_RUNACTIVE_KEY, true);
-            SmartDashboard.putNumber(GLOBAL_RUNSTART_KEY, Timer.getFPGATimestamp());
+            runStartTimeSec = Timer.getFPGATimestamp();
+            SmartDashboard.putNumber(GLOBAL_RUNSTART_KEY, runStartTimeSec);
 
             for (DiagDeviceBase d : DEVICES) {
                 d.prepareForNewRun(runId);
@@ -124,6 +126,30 @@ public abstract class DiagDeviceBase {
         }
 
         autoEndRunIfAllSelectedComplete();
+    }
+
+    public static void dashboardAll() {
+        dashboardAll(false);
+    }
+
+    public static void dashboardAll(boolean allowButtons) {
+
+        ensureGlobalDashboardKeys();
+        publishGlobalRunState(allowButtons);
+
+        for (DiagDeviceBase d : DEVICES) {
+            d.dashboardPeriodic();
+        }
+    }
+
+    private static void publishGlobalRunState(boolean allowButtons) {
+        SmartDashboard.putNumber(GLOBAL_RUNID_KEY, runId);
+        SmartDashboard.putBoolean(GLOBAL_RUNACTIVE_KEY, runActive);
+        SmartDashboard.putNumber(GLOBAL_RUNSTART_KEY, runStartTimeSec);
+        if (!allowButtons) {
+            SmartDashboard.putBoolean(GLOBAL_START_KEY, false);
+            SmartDashboard.putBoolean(GLOBAL_STOP_KEY, false);
+        }
     }
 
     public static void stopAll() {
@@ -432,6 +458,21 @@ public abstract class DiagDeviceBase {
     // ------------------------------------------------------------
     // Dashboard
     // ------------------------------------------------------------
+
+    void dashboardPeriodic() {
+
+        ensureGlobalDashboardKeys();
+
+        if (!dashboardInitialized) {
+            updateDashboard(false, false);
+            return;
+        }
+
+        boolean stagedEnable = SmartDashboard.getBoolean(baseKey + "Enable", false);
+        boolean retry        = SmartDashboard.getBoolean(baseKey + "Retry", false);
+
+        updateDashboard(stagedEnable, retry);
+    }
 
     void updateDashboard(boolean enable, boolean retry) {
 
